@@ -6,10 +6,18 @@
 
 	.eqv BAR_WIDTH 32
 	
-	.eqv DISPLAY_ADDR 0x10010000
-		
+	#.eqv DISPLAY_ADDR 0x10010000
+	.eqv DISPLAY_ADDR 0x10040000	
 				
 	draw_bar_jump_table: .word TOP, RIGHT, BOTTOM, LEFT
+	
+	speed: .space 4 # period of each beep number in ms
+	num_sequence_max: .space 4 # number max of sequences to win the game
+	
+	.eqv STACK_SIZE 128
+	stack: 
+		.space STACK_SIZE # data
+		.space 4 # top
 	
 
 	.eqv WHITE 0x00ffffff
@@ -22,13 +30,7 @@
 	.eqv YELLOW_LIGHT 0x00fffd7e
 	.eqv BLUE_LIGHT 0x00b8c9fe
 	.eqv BLUE 0x003eff
-	
-	speed: .space 4 # period of each beep number in ms
-	
-	.eqv STACK_SIZE 256
-	stack: 
-		.space STACK_SIZE # data
-		.space 4 # top
+
 
 .text
 	j main
@@ -302,7 +304,7 @@
 		li $a0, 60 # pitch
 		lw $a1, speed
 		li $a2, 90 # instrument
-		li $a3, 40 # volume
+		li $a3, 127 # volume
 		syscall
 		
 		jr $ra
@@ -332,11 +334,7 @@
 	stack_push:
 		# a0: ptr
 		# a1: value
-		lw $t1, 80($a0) # top, index
-		
-		# check if it will overflow
-		li $v0, 0
-		beq $t1, 20, push_failed_overflow
+		lw $t1, STACK_SIZE($a0) # top, index
 		
 		sll $t2, $t1, 2 # x4
 		addu $t2, $t2, $a0
@@ -346,10 +344,9 @@
 		sw $t1, STACK_SIZE($a0)
 		
 		li $v0, 1 # success
-		push_failed_overflow:
 		jr $ra
 	stack_pop:
-		lw $t1, 80($a0) # top, index
+		lw $t1, STACK_SIZE($a0) # top, index
 		li $v0, 0
 		beqz $t1, pop_empty
 			sll $t2, $t1, 2 # x4
@@ -362,34 +359,90 @@
 	stack_size:
 		lw $v0, STACK_SIZE($a0)
 		jr $ra
-	
+	stack_get_value_at_index:
+		# a0: pointer to stack (la)
+		# $a1 = index of array (0 to STACK_SIZE / 4)
+		sll $a1, $a1, 2 # x4
+		addu $a1, $a1, $a0
+		lw $v0, 0($a1)
+
+		jr $ra
 	main:
 			
 		addiu $sp, $sp, -24
 		
-		li $t1, 1000
-		sw $t1, speed
+		# do not to save $s0, $s1, ... used here
+		
 		
 		jal draw_game
 		
-		li $a0, 0
-		jal light
-		li $a0, 1
-		jal light
-		li $a0, 2
-		jal light
-		li $a0, 3
-		jal light
+		# stack used
+		la $s3, stack
+		move $a0, $s3
+		jal stack_init
 		
-		generate_number_loop: beq $t5, 20, generate_number_out
+		# number of sequences (max)
+		li $t1, 10
+		sw $t1, num_sequence_max
+		
+		# speed
+		li $t1, 1000
+		sw $t1, speed
+		
+		# starting in 3 sequences
+		li $s1, 3
+		# i 
+		li $s2, 0
+		loop_generate_sequence: beq $s2, $s1, out_loop_generate_sequence 
+			
 			jal generate_number
+			move $s4, $v0 # temp num
+			
+			move $a0, $s4
+			jal light
+			
+			move $a0, $s3 # stack ptr
+			move $a1, $s4 # num generated
+			jal stack_push
+			beq $v0, 1, pushed_ok
+				break
+			pushed_ok:
+			
+			addiu $s2, $s2, 1
+		j loop_generate_sequence
+		out_loop_generate_sequence:
+		
+		
+		li $s2, 0
+		
+		
+		# check stack
+			check_stack: beq $s2, $s1, check_stack_out
+			move $a0, $s3
+			move $a1, $s2 # index of arr
+			jal stack_get_value_at_index
 			move $a0, $v0
 			li $v0, 1
 			syscall
+			addiu $s2, $s2, 1
+			j check_stack
+		check_stack_out:
+		# end checking
 		
-			addiu $t5, $t5, 1
-			j generate_number_loop
-		generate_number_out:
+		# player turn
+		
+		
+		li $s2, 0
+		loop_play_sequence: beq $s2, $s1, out_loop_play_sequence
+			
+			# ...
+			addiu $s2, $s2, 1
+			j loop_play_sequence
+			
+		out_loop_play_sequence:
+		
 
 		addiu $sp, $sp 24
+		
+		break
 
