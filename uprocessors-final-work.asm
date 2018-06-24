@@ -25,6 +25,10 @@
 	
 	speed: .space 4 # period of each beep number in ms
 	
+	.eqv STACK_SIZE 256
+	stack: 
+		.space STACK_SIZE # data
+		.space 4 # top
 
 .text
 	j main
@@ -212,9 +216,6 @@
 	
 	
 	
-	# insert number into stack
-	push:
-	
 	# bright the color draft
 	light:
 	
@@ -314,7 +315,45 @@
 	# useful for waiting sometime so the player can visualize the sorted number
 	wait:
 	
-	# 
+	# stack functions
+	
+	stack_init:
+		# a0: pointer to stack (la)
+		sw $t0, STACK_SIZE($a0) # top = 0
+		jr $ra
+	stack_push:
+		# a0: ptr
+		# a1: value
+		lw $t1, 80($a0) # top, index
+		
+		# check if it will overflow
+		li $v0, 0
+		beq $t1, 20, push_failed_overflow
+		
+		sll $t2, $t1, 2 # x4
+		addu $t2, $t2, $a0
+		sw $a1, 0($t2)
+		
+		addiu $t1, $t1, 1 # top++
+		sw $t1, STACK_SIZE($a0)
+		
+		li $v0, 1 # success
+		push_failed_overflow:
+		jr $ra
+	stack_pop:
+		lw $t1, 80($a0) # top, index
+		li $v0, 0
+		beqz $t1, pop_empty
+			sll $t2, $t1, 2 # x4
+			addu $t2, $t2, $a0
+			lw $v0, -4($t2)
+			addiu $t1, $t1, -1 # top--
+			sw $t1, STACK_SIZE($a0)
+		pop_empty:
+		jr $ra
+	stack_size:
+		lw $v0, STACK_SIZE($a0)
+		jr $ra
 	
 	main:
 			
