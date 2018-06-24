@@ -213,7 +213,15 @@
 	
 	# generate a number between (including) 0 and 3
 	generate_number:
-	
+
+		li $a1, 4 # upper bound
+		li $v0, 42
+		syscall
+		
+		# $a0 hold the random int
+		move $v0, $a0
+		
+		jr $ra
 	
 	
 	# bright the color draft
@@ -372,6 +380,16 @@
 		jal light
 		li $a0, 3
 		jal light
+		
+		generate_number_loop: beq $t5, 20, generate_number_out
+			jal generate_number
+			move $a0, $v0
+			li $v0, 1
+			syscall
+		
+			addiu $t5, $t5, 1
+			j generate_number_loop
+		generate_number_out:
 
 		addiu $sp, $sp 24
 
