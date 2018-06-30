@@ -7,18 +7,16 @@
 	.eqv BAR_WIDTH 32
 	
 	#.eqv DISPLAY_ADDR 0x10010000
-	.eqv DISPLAY_ADDR 0x10040000	
+	.eqv DISPLAY_ADDR 0x10040000
 				
 	draw_bar_jump_table: .word TOP, RIGHT, BOTTOM, LEFT
 	
 	speed: .space 4 # period of each beep number in ms
 	num_sequence_max: .space 4 # number max of sequences to win the game
 	
-	.eqv STACK_SIZE 128
-	stack: 
-		.space STACK_SIZE # data
-		.space 4 # top
-	
+
+	keyboard_sequence: .space 32
+	keyboard_sequence_index: .space 4
 
 	.eqv WHITE 0x00ffffff
 	.eqv BLACK 0x00000000
@@ -30,9 +28,16 @@
 	.eqv YELLOW_LIGHT 0x00fffd7e
 	.eqv BLUE_LIGHT 0x00b8c9fe
 	.eqv BLUE 0x003eff
-
-
+	
+	menu_msg: 
+		.ascii  "\n1 - iniciar o jogo\n" 
+		.asciiz "2 - terminar o jogo\n"
+	speed_msg: .asciiz "\ninsira a velocidade do jogo em milisegundos:\n"
+	seq_msg: .asciiz "\ninsira o número de ativações:\n"
 .text
+
+	.globl main, enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, initBuffer, readBuffer, writeBuffer, stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
+
 	j main
 		
 	draw_game:
@@ -304,7 +309,7 @@
 		li $a0, 60 # pitch
 		lw $a1, speed
 		li $a2, 90 # instrument
-		li $a3, 127 # volume
+		li $a3, 80 # volume
 		syscall
 		
 		jr $ra
@@ -312,9 +317,42 @@
 	# noise when played wrong (missed number)
 	beep_wrong:
 	
+		li $v0, 33
+		
+		li $a0, 60 # pitch
+		lw $a1, speed
+		li $a2, 30 # instrument
+		li $a3, 127 # volume
+		syscall
+		
+		jr $ra
+	
 	# noise when played right
 	beep_right:
-	
+
+		li $v0, 33
+		
+		li $a0, 60 # pitch
+		lw $a1, speed
+		li $a2, 60 # instrument
+		li $a3, 127 # volume
+		syscall
+		
+		jr $ra
+
+	beep_champion:
+
+		li $v0, 33
+		
+		li $a0, 120 # pitch
+		lw $a1, 4000
+		li $a2, 10 # instrument
+		li $a3, 127 # volume
+		syscall
+		
+		jr $ra
+
+
 	# print message for the player
 	message:
 	
@@ -324,55 +362,25 @@
 	# wait period of time before continuing
 	# useful for waiting sometime so the player can visualize the sorted number
 	wait:
-	
-	# stack functions
-	
-	stack_init:
-		# a0: pointer to stack (la)
-		sw $t0, STACK_SIZE($a0) # top = 0
-		jr $ra
-	stack_push:
-		# a0: ptr
-		# a1: value
-		lw $t1, STACK_SIZE($a0) # top, index
 		
-		sll $t2, $t1, 2 # x4
-		addu $t2, $t2, $a0
-		sw $a1, 0($t2)
-		
-		addiu $t1, $t1, 1 # top++
-		sw $t1, STACK_SIZE($a0)
-		
-		li $v0, 1 # success
-		jr $ra
-	stack_pop:
-		lw $t1, STACK_SIZE($a0) # top, index
-		li $v0, 0
-		beqz $t1, pop_empty
-			sll $t2, $t1, 2 # x4
-			addu $t2, $t2, $a0
-			lw $v0, -4($t2)
-			addiu $t1, $t1, -1 # top--
-			sw $t1, STACK_SIZE($a0)
-		pop_empty:
-		jr $ra
-	stack_size:
-		lw $v0, STACK_SIZE($a0)
-		jr $ra
-	stack_get_value_at_index:
-		# a0: pointer to stack (la)
-		# $a1 = index of array (0 to STACK_SIZE / 4)
-		sll $a1, $a1, 2 # x4
-		addu $a1, $a1, $a0
-		lw $v0, 0($a1)
-
-		jr $ra
 	main:
 			
 		addiu $sp, $sp, -24
 		
 		# do not to save $s0, $s1, ... used here
 		
+		start_game:
+		
+		la $a0, menu_msg
+		jal print_string_display
+		
+		# while user input != (1 || 2)
+		main_loop_menu_msg:
+			jal readBuffer
+			beq $v0, 1, main_loop_menu_msg_out # keep playing
+			beq $v0, 2, main_end 		   # break
+			j main_loop_menu_msg	   	   # loop
+		main_loop_menu_msg_out:
 		
 		jal draw_game
 		
@@ -381,16 +389,31 @@
 		move $a0, $s3
 		jal stack_init
 		
+		# init ring buffer
+		la $a0, rb
+		jal initBuffer
+		
 		# number of sequences (max)
-		li $t1, 10
-		sw $t1, num_sequence_max
+		la $a0, rb
+		la $a1, seq_msg
+		jal get_valid_int_keyboard
+		sw $v0, num_sequence_max		
 		
 		# speed
-		li $t1, 1000
-		sw $t1, speed
+		la $a0, rb
+		la $a1, speed_msg
+		jal get_valid_int_keyboard
+		sw $v0, speed
 		
 		# starting in 3 sequences
-		li $s1, 3
+		li $s1, 1
+		
+		# points
+		li $s6, 0
+		
+		
+		keep_going:
+		
 		# i 
 		li $s2, 0
 		loop_generate_sequence: beq $s2, $s1, out_loop_generate_sequence 
@@ -415,34 +438,142 @@
 		
 		li $s2, 0
 		
-		
-		# check stack
-			check_stack: beq $s2, $s1, check_stack_out
-			move $a0, $s3
-			move $a1, $s2 # index of arr
-			jal stack_get_value_at_index
-			move $a0, $v0
-			li $v0, 1
-			syscall
-			addiu $s2, $s2, 1
-			j check_stack
-		check_stack_out:
-		# end checking
-		
 		# player turn
 		
-		
-		li $s2, 0
-		loop_play_sequence: beq $s2, $s1, out_loop_play_sequence
-			
-			# ...
-			addiu $s2, $s2, 1
-			j loop_play_sequence
-			
-		out_loop_play_sequence:
-		
+		jal enable_keyboard
 
+		la $a0, stack_keyboard
+		jal stack_init
+		
+		# while player did not play all sequences in keyboard
+		loop_play_sequence:
+			jal stack_size
+			
+			bne $s1, $v0, loop_play_sequence
+		
+		jal disable_keyboard
+		
+		
+		# all sequence played by player
+		li $s2, 0
+		check_sequence: beq $s2, $s1, check_sequence_out
+			la $a0, stack_keyboard
+			move $a1, $s2
+			jal stack_get_value_at_index
+			move $s4, $v0 # player: 0 to 3
+			
+			la $a0, stack
+			move $a1, $s2
+			jal stack_get_value_at_index
+			move $s5, $v0 # generated: 0 to 3
+			and $t1, $s4, $s5
+			bnez $t1, correct_typed
+			
+			wrong_typed:
+				jal beep_wrong
+				li $v0, 1
+				li $a0, 666
+				syscall
+				j start_game
+				
+			correct_typed:
+			li $v0, 1
+			li $a0, 555
+			syscall
+			addiu $s2, $s2, 1
+			j check_sequence
+		check_sequence_out:
+		
+		jal beep_right
+		
+		# add points
+		addiu $s6, $s6, 1
+		# increase sequence size
+		addiu $s1, $s1, 1
+		
+		lw $t1, num_sequence_max
+		beq $s1, $t1, champion
+		jal keep_going
+		
+		champion:
+			jal beep_champion
+
+		main_end:
 		addiu $sp, $sp 24
 		
+
 		break
 
+
+.kdata
+	_regs: .space 32
+.ktext 0x80000180
+
+	move $k0, $at # it should execute first since other inst. may change $at
+	la $k1, _regs
+	sw $k0, 0($k1)
+	sw $v0, 4($k1)
+	sw $a0, 8($k1)
+	sw $a1, 12($k1)
+	sw $t0, 16($k1)
+	sw $t1, 20($k1)
+	sw $ra, 24($k1)
+	
+	# check what exception occurred
+	# $13 contem causa
+	mfc0 $t1, $13
+	sra $t1, $t1, 2
+	and $t1, $t1, 0xF # exception code
+	
+	# if break does not handle
+	bne $t1, 9, dont_exit # break exception; do not return to program
+		li $v0, 17
+		syscall
+	dont_exit:
+	# print exception code
+	li $v0, 1
+	move $a0, $t1
+	syscall
+	
+	bnez $t1, not_hw_int
+		# deal with hw int
+		
+		# when keyboard interrupts, it sets to 1 the 9th bit ($13)
+		mfc0 $t0, $13
+		li $t2, 0x100
+		and $t2, $t2, $t0
+		beqz $t2, not_keyboard_int
+			
+			# treat interrup. from keyboard
+			
+			# just save to ringbuffer and go back - we must not be long here since it is kernel
+
+			jal get_char_keyboard
+			la $a0, rb
+			move $a1, $v0
+			jal writeBuffer
+			
+			# does not go to the next instruction when back to main loop
+			mfc0 $k0, $14
+			addiu $k0, $k0, -4
+			mtc0 $k0, $14
+			
+		not_keyboard_int:
+			
+	not_hw_int:
+
+
+	la $k1, _regs
+	lw $at, 0($k1)
+	lw $v0, 4($k1)
+	lw $a0, 8($k1)
+	lw $a1, 12($k1)
+	lw $t0, 16($k1)
+	lw $t1, 20($k1)
+	lw $ra, 24($k1)
+	
+	mfc0 $k0, $14
+	addiu $k0, $k0, 4
+	mtc0 $k0, $14
+	
+	eret
