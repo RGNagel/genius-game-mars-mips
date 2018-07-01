@@ -1,6 +1,7 @@
 .text
 
-	#.globl enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display
+	.globl enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, get_valid_int_keyboard
+	
 	
 	enable_keyboard:
 	
@@ -27,14 +28,24 @@
 	print_string_display:
 		# a0: & string to print
 		
-		lb $a0, 0($a0)
+		addiu $sp, $sp, -24
+		sw $ra, 16($sp)
+		sw $s0, 20($sp)
 		
+		move $s0, $a0
+
 		# null terminator \0 = NUL = 0
-		
+		print_string_display_loop:
+		lb $a0, 0($s0)
 		beqz $a0, end_of_string
 			jal print_char_display
+			addiu $s0, $s0, 1
+			j print_string_display_loop
 		end_of_string:
 		# does not print \0
+		
+		lw $ra, 16($sp)
+		addiu $sp, $sp, 24
 		
 		jr $ra
 	
@@ -45,6 +56,8 @@
 		
 		# init ring buffer
 		jal initBuffer
+		
+		jal enable_keyboard
 		
 		sw $a0, 0($sp)
 		sw $a1, 4($sp)
@@ -94,6 +107,8 @@
 			
 			j get_valid_int_keyboard_loop_2
 		main_loop_speed_msg_out:
+		
+		jal disable_keyboard
 		
 		move $v0, $s3
 		

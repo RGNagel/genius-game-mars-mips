@@ -34,9 +34,28 @@
 		.asciiz "2 - terminar o jogo\n"
 	speed_msg: .asciiz "\ninsira a velocidade do jogo em milisegundos:\n"
 	seq_msg: .asciiz "\ninsira o número de ativações:\n"
+	
+	# STACK
+	.eqv STACK_SIZE 128
+	stack: 
+		.space STACK_SIZE # data
+		.space 4 # top
+	stack_keyboard:
+		.space STACK_SIZE # data
+		.space 4 # top
+
+	# RING BUFFER
+	.eqv RB_SIZE 64
+	rb:
+		.space RB_SIZE # data
+		.space 4 # rd
+		.space 4 # wr
+		.space 4 # size
+	
 .text
 
-	.globl main, enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, initBuffer, readBuffer, writeBuffer, stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
+	#.globl main, enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, initBuffer, readBuffer, writeBuffer, stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
+	.globl main
 
 	j main
 		
@@ -405,6 +424,9 @@
 		jal get_valid_int_keyboard
 		sw $v0, speed
 		
+		
+		break
+		
 		# starting in 3 sequences
 		li $s1, 1
 		
@@ -547,11 +569,14 @@
 			# treat interrup. from keyboard
 			
 			# just save to ringbuffer and go back - we must not be long here since it is kernel
-
-			jal get_char_keyboard
+			la $t1, get_char_keyboard
+			jalr $t1
+			#jal get_char_keyboard
 			la $a0, rb
 			move $a1, $v0
-			jal writeBuffer
+			la $t1, writeBuffer
+			jalr $t1
+			#jal writeBuffer
 			
 			# does not go to the next instruction when back to main loop
 			mfc0 $k0, $14

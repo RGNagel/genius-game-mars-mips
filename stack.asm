@@ -1,17 +1,10 @@
 .data
 
-	# STACK
 	.eqv STACK_SIZE 128
-	stack: 
-		.space STACK_SIZE # data
-		.space 4 # top
-	stack_keyboard: 
-		.space STACK_SIZE # data
-		.space 4 # top
 
 .text	
 
-	#.globl stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
+	.globl stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
 	
 	# stack functions
 	

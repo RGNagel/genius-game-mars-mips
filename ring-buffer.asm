@@ -1,14 +1,7 @@
 .data
-
-	# RING BUFFER
+	
 	.eqv RB_SIZE 64
-	rb:
-		.space RB_SIZE # data
-		.space 4 # rd
-		.space 4 # wr
-		.space 4 # size
-
-		#rb:
+				#rb:
 	#	.space RB_SIZE # data
 	#	.space 4 # rd
 	#	.space 4 # wr
@@ -17,7 +10,7 @@
 	
 .text
 
-	#.globl initBuffer, readBuffer, writeBuffer
+	.globl initBuffer, readBuffer, writeBuffer
 		
 	initBuffer:
 		# a0 pointer to ringbuffer
