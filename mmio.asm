@@ -1,6 +1,11 @@
+.data
+
+	get_valid_int_keyboard_msg: .asciiz "\nget_valid_int_keyboard_msg: "
+	newline: .asciiz "\n"
+
 .text
 
-	.globl enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, get_valid_int_keyboard
+	.globl enable_keyboard, disable_keyboard, get_char_keyboard, print_string_display, get_valid_int_keyboard
 	
 	
 	enable_keyboard:
@@ -18,7 +23,7 @@
 		
 		jr $ra	
 	get_char_keyboard:
-		lw $v0, 0xffff0004
+		lb $v0, 0xffff0004
 		jr $ra
 		
 	print_char_display:
@@ -29,10 +34,14 @@
 		# a0: & string to print
 		
 		addiu $sp, $sp, -24
-		sw $ra, 16($sp)
-		sw $s0, 20($sp)
+		sw $ra, 20($sp)
+		sw $s0, 16($sp)
 		
 		move $s0, $a0
+
+		# ENABLES: Ready bit set (1) in the Transmitter Control register
+		li $t1, 1
+		sw $t1, 0xffff0008
 
 		# null terminator \0 = NUL = 0
 		print_string_display_loop:
@@ -44,7 +53,9 @@
 		end_of_string:
 		# does not print \0
 		
-		lw $ra, 16($sp)
+		lw $ra, 20($sp)
+		lw $s0, 16($sp)
+		
 		addiu $sp, $sp, 24
 		
 		jr $ra
@@ -54,13 +65,15 @@
 		# a1: ptr to string msg input
 		# returns int
 		
+		sw $a0, 0($sp)
+		sw $a1, 4($sp)
+		
 		# init ring buffer
 		jal initBuffer
 		
 		jal enable_keyboard
 		
-		sw $a0, 0($sp)
-		sw $a1, 4($sp)
+
 		addiu $sp, $sp, -36
 		sw $ra, 16($sp)
 		sw $s0, 20($sp)
@@ -68,8 +81,8 @@
 		sw $s2, 28($sp)
 		sw $s3, 32($sp)
 		
-		move $s1, $a0 # &rb
-		move $s2, $a1 # &msg
+		lw $s1, 36($sp) # &rb
+		lw $s2, 40($sp) # &msg
 		
 		get_valid_int_keyboard_loop:
 		
@@ -83,18 +96,18 @@
 		get_valid_int_keyboard_loop_2:
 			# read buffer
 			move $a0, $s1
-			jal readBuffer
-			# if readBuffer reads nothing, returns 0
+			jal readBuffer # if readBuffer reads nothing, returns 0
 			beqz $v0, get_valid_int_keyboard_loop_2
 			
 			# check if end of input (enter + char number preceding)
-			seq $t3, $v0, 13  # enter char input
-			and $t3, $t3, $s0 # it is end of input (enter + char preceding)
+			seq $t3, $v0, 10  # enter char input
+			sgt $t4, $s0, 0 # char preceding > 0
+			and $t3, $t3, $t4 # it is end of input (enter + char preceding)
 			bgtz $t3, main_loop_speed_msg_out
 			
 			# check if number input (valid)
-			sge $t1, $v0, 48
-			sle $t2, $v0, 57
+			sge $t1, $v0, 48 # >= 0
+			sle $t2, $v0, 57 # <= 9
 			and $t1, $t1, $t2 # number char input, OK
 			bne $t1, 1, get_valid_int_keyboard_loop # repeat question due it is invalid input
 			
@@ -102,7 +115,8 @@
 			addiu $s0, $s0, 1 # counter of chars ++
 			
 			# join chars to form int
-			mul $s3, $s3, 10
+			mul $s3, $s3, 10			
+			addiu $v0, $v0, -48 # ascii to decimal
 			add $s3, $s3, $v0
 			
 			j get_valid_int_keyboard_loop_2
@@ -110,7 +124,18 @@
 		
 		jal disable_keyboard
 		
-		move $v0, $s3
+		# print final integer for debug
+			li $v0, 4
+			la $a0, get_valid_int_keyboard_msg
+			syscall
+			li $v0, 1
+			move $a0, $s3
+			syscall
+			li $v0, 4
+			la $a0, newline
+			syscall
+
+		move $v0, $s3 # return
 		
 		lw $ra, 16($sp)
 		lw $s0, 20($sp)

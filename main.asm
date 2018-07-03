@@ -35,6 +35,7 @@
 	speed_msg: .asciiz "\ninsira a velocidade do jogo em milisegundos:\n"
 	seq_msg: .asciiz "\ninsira o número de ativações:\n"
 	
+	
 	# STACK
 	.eqv STACK_SIZE 128
 	stack: 
@@ -45,15 +46,16 @@
 		.space 4 # top
 
 	# RING BUFFER
-	.eqv RB_SIZE 64
+	.eqv RB_SIZE 32
 	rb:
 		.space RB_SIZE # data
 		.space 4 # rd
 		.space 4 # wr
 		.space 4 # size
 	
-.text
 
+	
+.text
 	#.globl main, enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, initBuffer, readBuffer, writeBuffer, stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
 	.globl main
 
@@ -371,17 +373,6 @@
 		
 		jr $ra
 
-
-	# print message for the player
-	message:
-	
-	# prompt the player
-	ask:
-	
-	# wait period of time before continuing
-	# useful for waiting sometime so the player can visualize the sorted number
-	wait:
-		
 	main:
 			
 		addiu $sp, $sp, -24
@@ -392,40 +383,46 @@
 		
 		la $a0, menu_msg
 		jal print_string_display
-		
-		# while user input != (1 || 2)
-		main_loop_menu_msg:
-			jal readBuffer
-			beq $v0, 1, main_loop_menu_msg_out # keep playing
-			beq $v0, 2, main_end 		   # break
-			j main_loop_menu_msg	   	   # loop
-		main_loop_menu_msg_out:
-		
-		jal draw_game
-		
-		# stack used
-		la $s3, stack
-		move $a0, $s3
-		jal stack_init
-		
+
 		# init ring buffer
 		la $a0, rb
 		jal initBuffer
+		
+		# while user input != ('1' || '2')
+		jal enable_keyboard
+		la $s7, rb
+		main_loop_menu_msg:
+			move $a0, $s7
+			jal readBuffer
+			beq $v0, 49, main_loop_menu_msg_out # typed '1': keep playing
+			beq $v0, 50, main_end 		   # typed '2': break
+			j main_loop_menu_msg	   	   # loop
+		main_loop_menu_msg_out:
+		
+		jal disable_keyboard
+		
+		# uncomment after
+		#jal draw_game 
+		
+		# stack used
+		la $a0, stack
+		jal stack_init
+		
+		# get_valid_int_keyboard enables keyboard within it
 		
 		# number of sequences (max)
 		la $a0, rb
 		la $a1, seq_msg
 		jal get_valid_int_keyboard
-		sw $v0, num_sequence_max		
+		sw $v0, num_sequence_max
+		
+		break # remove after
 		
 		# speed
 		la $a0, rb
 		la $a1, speed_msg
 		jal get_valid_int_keyboard
 		sw $v0, speed
-		
-		
-		break
 		
 		# starting in 3 sequences
 		li $s1, 1
@@ -523,7 +520,6 @@
 		main_end:
 		addiu $sp, $sp 24
 		
-
 		break
 
 
@@ -542,7 +538,7 @@
 	sw $ra, 24($k1)
 	
 	# check what exception occurred
-	# $13 contem causa
+	# $13 has cause
 	mfc0 $t1, $13
 	sra $t1, $t1, 2
 	and $t1, $t1, 0xF # exception code
@@ -552,6 +548,7 @@
 		li $v0, 17
 		syscall
 	dont_exit:
+	
 	# print exception code
 	li $v0, 1
 	move $a0, $t1
@@ -569,14 +566,15 @@
 			# treat interrup. from keyboard
 			
 			# just save to ringbuffer and go back - we must not be long here since it is kernel
+			
 			la $t1, get_char_keyboard
 			jalr $t1
-			#jal get_char_keyboard
+			
 			la $a0, rb
 			move $a1, $v0
 			la $t1, writeBuffer
 			jalr $t1
-			#jal writeBuffer
+			
 			
 			# does not go to the next instruction when back to main loop
 			mfc0 $k0, $14
