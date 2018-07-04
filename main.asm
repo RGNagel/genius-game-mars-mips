@@ -75,9 +75,8 @@
 		
 		# while user input != ('1' || '2')
 		jal enable_keyboard
-		la $s7, rb
 		main_loop_menu_msg:
-			move $a0, $s7
+			la $a0, rb
 			jal readBuffer
 			beq $v0, 49, main_loop_menu_msg_out # typed '1': keep playing
 			beq $v0, 50, main_end 		   # typed '2': break
@@ -85,7 +84,6 @@
 		main_loop_menu_msg_out:
 		
 		jal disable_keyboard
-		
 		
 		jal draw_game 
 	
@@ -104,8 +102,8 @@
 		jal get_valid_int_keyboard
 		sw $v0, speed
 					
-		# starting in 3 sequences
-		li $s1, 3
+		# starting in 1 sequences
+		li $s1, 1
 		
 		# points
 		li $s6, 0
@@ -115,18 +113,38 @@
 		print_str("\nPoints: ")
 		print_int($s6)
 
-		keep_going:
-		
 		# prepare stacks
+		# stack sequence is prapared only first time since sequence continuous from previous one
 		la $a0, stack
 		jal stack_init
-		la $a0, stack_keyboard
-		jal stack_init
+
+		keep_going:
 		
-		li $s2, 0 # i
+		# before generating, iterate through stack to light previous generated values in stack
+		la $a0, stack
+		jal stack_size
+		# $s2, $s4 can be used for temp here
+		move $s2, $v0 # temp
+		li $s4, 0 # i = 0
+		beqz $v0, iterate_through_previous_stack_out
+			print_str("\nprevious generated: ")
+			iterate_through_previous_stack:
+				la $a0, stack
+				move $a1, $s4
+				jal stack_get_value_at_index
+				move $a0, $v0
+				jal light
+				addiu $s4, $s4, 1 # i++
+				bne $s4, $s2, iterate_through_previous_stack # else it iterated all previous values 
+		iterate_through_previous_stack_out:
+		
+		# now generate new values
+		jal generate_seed # seed for pseudo-random values
+		loop_generate_sequence:
 		print_str("\ngenerated: ")
-		jal generate_seed
-		loop_generate_sequence: beq $s2, $s1, out_loop_generate_sequence 
+		la $a0, stack
+		jal stack_size
+		beq $s1, $v0, out_loop_generate_sequence # $s1 = current sequence position
 			jal generate_number
 			move $s4, $v0 # temp num
 			
@@ -139,12 +157,8 @@
 			la $a0, stack
 			move $a1, $s4 # num generated
 			jal stack_push
-			beq $v0, 1, pushed_ok
-				break
-			pushed_ok:
-			
-			addiu $s2, $s2, 1
-		j loop_generate_sequence
+			beq $v0, 1, loop_generate_sequence
+			break # if push failed
 		out_loop_generate_sequence:
 		print_str("\n")
 		
@@ -186,21 +200,29 @@
 			j loop_play_sequence
 			
 			loop_play_sequence_w:
+				li $a0, 0
+				jal light
 				li $t1, 0
 				j loop_play_sequence_out
 			loop_play_sequence_d:
+				li $a0, 1
+				jal light
 				li $t1, 1
 				j loop_play_sequence_out
 			loop_play_sequence_s:
+				li $a0, 2
+				jal light
 				li $t1, 2
 				j loop_play_sequence_out
 			loop_play_sequence_a:
+				li $a0, 3
+				jal light
 				li $t1, 3
 			loop_play_sequence_out:
 			
-			print_str("player played: ")
-			print_int($t1)
-			print_str("\n")
+			#print_str("player played: ")
+			#print_int($t1)
+			#print_str("\n")
 
 			la $a0, stack_keyboard
 			move $a1, $t1
@@ -250,6 +272,7 @@
 		addiu $s1, $s1, 1
 		
 		lw $t1, num_sequence_max
+		addiu $t1, $t1, 1
 		beq $s1, $t1, champion
 		jal keep_going
 		
@@ -394,7 +417,6 @@
 			move $a1, $v0
 			la $t1, writeBuffer
 			jalr $t1
-			
 			
 			# does not go to the next instruction when back to main loop
 			mfc0 $k0, $14
