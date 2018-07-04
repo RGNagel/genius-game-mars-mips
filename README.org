@@ -13,4 +13,4 @@
 
 - unmark the follow box in /Settings -> Exception Handler/:
  
-  - /'Include this exception file in all assemble operations'/
+  - '/Include this exception file in all assemble operations/'
