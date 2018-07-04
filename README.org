@@ -11,6 +11,6 @@
   
 ** if problem with exception handler file not found
 
-- umark the follow box in /Settings -> Exception Handler/:
+- unmark the follow box in /Settings -> Exception Handler/:
  
-  - /Include this exception file in all assemble operations/
+  - /'Include this exception file in all assemble operations'/
