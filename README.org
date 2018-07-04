@@ -1,11 +1,11 @@
 * This is a simple version of Genius Game
 
-- *Before* compiling, set it up in MARS:
+- *Before* assembling, set it up in MARS:
 
   - mark the following boxes in /Settings/:
     - /Assemble all files in directory/
     - /Initialize Program Counter to global 'main' if defined/
   - unmark /DAD/ in MMIO simulator
-  - *bitmap* address should be mapped to */heap/* (this is a workaround to a problem of overlapping data in data segment)
+  - *bitmap* address should be mapped to /heap/ (this is a workaround to a problem of overlapping data in data segment)
   - *bitmap display* must have a proportion of /128/ (changeable in =.data=) between /width/ and /unit width/ and /height/ and /unit height/
   
