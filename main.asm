@@ -1,52 +1,52 @@
-.data
-	# cartesian plan with origin at upper left corner
-	
-	.eqv DISPLAY_WIDTH 128 # = display width / unit width
-	.eqv DISPLAY_HEIGHT 128 # = display height / unit height
+.macro print_str (%str)
+	.data
+		print_str_label: .asciiz %str
+	.text
+		li $v0, 4
+		la $a0, print_str_label
+		syscall
+.end_macro
 
-	.eqv BAR_WIDTH 32
-	
-	#.eqv DISPLAY_ADDR 0x10010000
-	.eqv DISPLAY_ADDR 0x10040000
-				
-	draw_bar_jump_table: .word TOP, RIGHT, BOTTOM, LEFT
-	
+.macro print_int (%x)
+	li $v0, 1
+	add $a0, $zero, %x
+	syscall
+.end_macro
+
+.data
+
 	speed: .space 4 # period of each beep number in ms
 	num_sequence_max: .space 4 # number max of sequences to win the game
 	
-
 	keyboard_sequence: .space 32
 	keyboard_sequence_index: .space 4
-
-	.eqv WHITE 0x00ffffff
-	.eqv BLACK 0x00000000
-	.eqv RED 0x00ff2d00
-	.eqv RED_LIGHT 0x00f9927c
-	.eqv GREEN 0x003aff00
-	.eqv GREEN_LIGHT 0x0099fa7c
-	.eqv YELLOW 0x00ffff00
-	.eqv YELLOW_LIGHT 0x00fffd7e
-	.eqv BLUE_LIGHT 0x00b8c9fe
-	.eqv BLUE 0x003eff
 	
 	menu_msg: 
-		.ascii  "\n1 - iniciar o jogo\n" 
-		.asciiz "2 - terminar o jogo\n"
-	speed_msg: .asciiz "\ninsira a velocidade do jogo em milisegundos:\n"
-	seq_msg: .asciiz "\ninsira o número de ativações:\n"
-	
+		.ascii  "\n1 - iniciar o jogo" 
+		.asciiz "\n2 - terminar o jogo\n"
+	speed_msg: .asciiz "\nvelocidade do jogo (ms): "
+	seq_msg: .asciiz "\ninsira o numero de ativacoes: "
+	player_turn_msg: .asciiz "\nSua vez de jogar: "
+	champion_msg: .asciiz "\nParabens! Voce foi campeao."
+	correct_msg: .asciiz "\nSequencia correta."
+	wrong_msg: .asciiz "\nSequencia errada."
+	wrong_typed_msg: .asciiz "\nTecla invalida. De novo (w,d,s,a):"
 	
 	# STACK
 	.eqv STACK_SIZE 128
+	.align 2
 	stack: 
 		.space STACK_SIZE # data
 		.space 4 # top
+		
+	.align 2
 	stack_keyboard:
 		.space STACK_SIZE # data
 		.space 4 # top
 
 	# RING BUFFER
 	.eqv RB_SIZE 32
+	.align 2
 	rb:
 		.space RB_SIZE # data
 		.space 4 # rd
@@ -56,270 +56,240 @@
 
 	
 .text
-	#.globl main, enable_keyboard, disable_keyboard, get_char_keyboard, print_char_display, print_string_display, initBuffer, readBuffer, writeBuffer, stack_init, stack_push, stack_pop, stack_size, stack_get_value_at_index
-	.globl main
+	.globl main, beep_number
 
-	j main
-		
-	draw_game:
-	
+	main:
+			
 		addiu $sp, $sp, -24
-		sw $ra, 20($sp)
-	
-		li $a0, 0
-		li $a1, GREEN
-		jal draw_bar
 		
-		li $a0, 1
-		li $a1, RED
-		jal draw_bar
+		# do not to save $s0, $s1, ... used here
 		
-		li $a0, 2
-		li $a1, BLUE
-		jal draw_bar
+		start_game:
 		
-		li $a0, 3
-		li $a1, YELLOW
-		jal draw_bar
-		
-		lw $ra, 20($sp)
-		addiu $sp, $sp, 24
-		jr $ra
-		
+		la $a0, menu_msg
+		jal print_string_display
 
-	draw_bar:
-		#a0: position: 0: top, 1: right, 2: bottom, 3: right
-		#a1: color
+		# init ring buffer
+		la $a0, rb
+		jal initBuffer
 		
-		sw $a0 0($sp)
-		sw $a1, 4($sp)
+		# while user input != ('1' || '2')
+		jal enable_keyboard
+		la $s7, rb
+		main_loop_menu_msg:
+			move $a0, $s7
+			jal readBuffer
+			beq $v0, 49, main_loop_menu_msg_out # typed '1': keep playing
+			beq $v0, 50, main_end 		   # typed '2': break
+			j main_loop_menu_msg	   	   # loop
+		main_loop_menu_msg_out:
 		
-		addiu $sp, $sp, -24
-		sw $ra, 20($sp)
+		jal disable_keyboard
 		
-		# switch
-		sll $a0, $a0, 2
-		la $t1, draw_bar_jump_table
-		add $t1, $t1, $a0
-		lw $t1, 0($t1)
-		jr $t1
 		
-		TOP:
-			# point 1
-			li $a0, BAR_WIDTH
-			addiu $a0, $a0, 1 # avoid overlay on left
-			li $a1, 0
-			# point 2
-			li $a2, DISPLAY_WIDTH
-			addiu $a2, $a2, -BAR_WIDTH
-			addiu $a2, $a2, -1 # avoid overlay on right
-			li $a3, BAR_WIDTH
-			addiu $a3, $a3, -1 # avoid overlay on right
-			
-			
-			j COLOR		
-		RIGHT:
-			# point 1
-			li $a0, DISPLAY_WIDTH
-			addiu $a0, $a0, -BAR_WIDTH
-			li $a1, BAR_WIDTH
-			# point 2
-			li $a2, DISPLAY_WIDTH
-			li $a3, DISPLAY_HEIGHT
-			addiu $a3, $a3, -BAR_WIDTH
-			
-			j COLOR
-		BOTTOM:
-			# point 1
-			li $a0, BAR_WIDTH
-			addiu $a0, $a0, 1 # avoid overlay on left
-			li $a1, DISPLAY_HEIGHT
-			addiu $a1, $a1, -BAR_WIDTH
-			addiu $a1, $a1, 1 # avoid overlay on right
-		
-			# point 2
-			li $a2, DISPLAY_WIDTH
-			addiu $a2, $a2, -BAR_WIDTH
-			addiu $a2, $a2, -1 # avoid overlay on right
-			li $a3, DISPLAY_HEIGHT
-			addiu $a3, $a3, -1 # avoid overlay on right
-			
-			j COLOR		
-		LEFT:
-			# point 1
-			li $a0, 0
-			li $a1, BAR_WIDTH
-			# point 2
-			li $a2, BAR_WIDTH
-			li $a3, DISPLAY_HEIGHT
-			sub $a3, $a3, BAR_WIDTH
-		COLOR:
-
-		lw $t1, 28($sp) # load color
-		sw $t1, 16($sp) # set color for draw rectangle
-		jal drawRectangle
-		
-		lw $ra, 20($sp)
-		addiu $sp, $sp, 24
-		jr $ra
+		jal draw_game 
 	
-	setPixel:
-		# a0: x
-		# a1: y
-		# a2: color
+		# get_valid_int_keyboard enables keyboard within it
+		# get_valid_int_keyboard prepares ringbuffer
+		
+		# number of sequences (max)
+		la $a0, rb
+		la $a1, seq_msg
+		jal get_valid_int_keyboard
+		sw $v0, num_sequence_max
+		
+		# speed
+		la $a0, rb
+		la $a1, speed_msg
+		jal get_valid_int_keyboard
+		sw $v0, speed
+					
+		# starting in 3 sequences
+		li $s1, 3
+		
+		# points
+		li $s6, 0
+			
+		print_str("\nSequence number: ")
+		print_int($s1)
+		print_str("\nPoints: ")
+		print_int($s6)
+
+		keep_going:
+		
+		# prepare stacks
+		la $a0, stack
+		jal stack_init
+		la $a0, stack_keyboard
+		jal stack_init
+		
+		li $s2, 0 # i
+		print_str("\ngenerated: ")
+		jal generate_seed
+		loop_generate_sequence: beq $s2, $s1, out_loop_generate_sequence 
+			jal generate_number
+			move $s4, $v0 # temp num
+			
+			print_int($s4)
+			print_str(" ")
+			
+			move $a0, $s4
+			jal light
+			
+			la $a0, stack
+			move $a1, $s4 # num generated
+			jal stack_push
+			beq $v0, 1, pushed_ok
+				break
+			pushed_ok:
+			
+			addiu $s2, $s2, 1
+		j loop_generate_sequence
+		out_loop_generate_sequence:
+		print_str("\n")
+		
+		li $s2, 0 # i
+		
+		## player turn ##
+		
+		# prepare rb
+		la $a0, rb
+		jal initBuffer
+		# prepare stack
+		la $a0, stack_keyboard
+		jal stack_init
+		
+		jal enable_keyboard
+		# while player did not play all sequences in keyboard
+		
+		la $a0, player_turn_msg
+		jal print_string_display
+		
+		loop_play_sequence:
+			la $a0, rb
+			jal readBuffer # if 0 it is empty
+			beqz $v0, loop_play_sequence
+			
+			# player played
+			
+			# convert a,w,d,s -> 0,1,2,3 OR invalid			
 				
-		# memory address offset = (y*display_width + x)*4
-		mul $t4, $a1, DISPLAY_WIDTH # y*display_width
-		add $t4, $t4, $a0 # + x
-		sll $t4, $t4, 2 # memory offset (x4)
-		
-		addi $t4, $t4, DISPLAY_ADDR # sum with memory origin
-		
-		sw $a2, 0($t4) # set color
-		
-		jr $ra
-		
-	drawRectangle:
-		# additional arguments (more than 4) go onto stack
-		# a0: x0
-		# a1: y0
-		# a2: x1
-		# a3: y1
-		# 16($sp): color
-		
-		sw $a0, 0($sp)
-		sw $a1, 4($sp)
-		sw $a2, 8($sp)
-		# unnecessary to save a3, a4, color if not overwriting them here 
-		
-		addiu $sp, $sp, -40
-		# 0($sp) a0 setPixel
-		# 4($sp) a1 setPixel		
-		# 8($sp) a2 setPixel
-		sw $s0, 12($sp)
-		sw $s1, 16($sp)
-		sw $s2, 20($sp)
-		sw $s3, 24($sp)
-		sw $s4, 28($sp)
-		sw $s5, 32($sp)
-		sw $ra, 36($sp)
-		
-		move $s0, $a0 # x0
-		move $s1, $a1 # y0
-		move $s2, $a2 # x1
-		move $s3, $a3 # y1
-		
-		move $s4, $s0 # x
-		move $s5, $s1 # y
-		loop_y:
-		bgt $s5, $s3, loop_y_out # while y <= y1
-			loop_x:
-			bgt $s4, $s2, loop_x_out # while x <= x1
-				move $a0, $s4 # x
-				move $a1, $s5 # y
-				lw $a2, 56($sp) # color
-				jal setPixel
-				addiu $s4, $s4, 1 # increment column
-				j loop_x
-			loop_x_out:
-			move $s4, $s0 # reset column index
-			addiu $s5, $s5, 1 # increment row
-			j loop_y
-		 loop_y_out:
-		
-		# epilogue
-		lw $s0, 12($sp)
-		lw $s1, 16($sp)
-		lw $s2, 20($sp)
-		lw $s3, 24($sp)
-		lw $s4, 28($sp)
-		lw $s5, 32($sp)
-		lw $ra, 36($sp)
-		addiu $sp, $sp, 40
-		jr $ra
-	
-	
-	# generate a number between (including) 0 and 3
-	generate_number:
+			beq $v0, 119, loop_play_sequence_w
+			beq $v0, 100, loop_play_sequence_d
+			beq $v0, 115, loop_play_sequence_s
+			beq $v0, 97, loop_play_sequence_a
+			
+			# played invalid
+			la $a0, wrong_typed_msg
+			jal print_string_display
+			print_str("\ninvalid typed")
+			j loop_play_sequence
+			
+			loop_play_sequence_w:
+				li $t1, 0
+				j loop_play_sequence_out
+			loop_play_sequence_d:
+				li $t1, 1
+				j loop_play_sequence_out
+			loop_play_sequence_s:
+				li $t1, 2
+				j loop_play_sequence_out
+			loop_play_sequence_a:
+				li $t1, 3
+			loop_play_sequence_out:
+			
+			print_str("player played: ")
+			print_int($t1)
+			print_str("\n")
 
+			la $a0, stack_keyboard
+			move $a1, $t1
+			jal stack_push
+
+			la $a0, stack_keyboard	
+			jal stack_size
+			bne $s1, $v0, loop_play_sequence # $s1 = current sequence number
+		jal disable_keyboard
+		
+		## check sequence played ##
+		
+		# all sequence played by player
+		li $s2, 0 # i
+		print_str("\nChecking sequence:")
+		check_sequence: beq $s2, $s1, check_sequence_out # $s1 = current sequence length (start at 3)
+			la $a0, stack_keyboard
+			move $a1, $s2 # i
+			jal stack_get_value_at_index
+			move $s4, $v0 # player: 0 to 3
+			
+			la $a0, stack
+			move $a1, $s2 # I
+			jal stack_get_value_at_index
+			move $s5, $v0 # generated: 0 to 3
+			
+			beq $s4, $s5, correct_typed # played = generated?
+			wrong_typed:
+				print_str("\nwrong typed.")
+				la $a0, wrong_msg
+				jal print_string_display
+				jal beep_wrong
+				j start_game		
+			correct_typed:
+				print_str("\ncorrect typed")
+			addiu $s2, $s2, 1
+			j check_sequence
+		check_sequence_out:
+		la $a0, correct_msg
+		jal print_string_display
+		print_str("\nSequence right!")
+		jal beep_right
+		
+		# add points
+		addiu $s6, $s6, 1
+		# increase sequence size
+		addiu $s1, $s1, 1
+		
+		lw $t1, num_sequence_max
+		beq $s1, $t1, champion
+		jal keep_going
+		
+		champion:
+			print_str("\nchampion!!!")
+			la $a0, champion_msg
+			jal print_string_display
+			jal beep_champion
+			jal start_game
+		main_end:
+		addiu $sp, $sp 24
+		
+		break
+
+
+	# generate a number between (including) 0 and 3
+	
+	generate_seed:
+	
+		li $v0, 30 # System Time syscall
+		syscall                  # $a0 will contain the 32 LS bits of the system time
+		move $t1, $a0
+		
+		li $v0, 40 # random seed
+		li $a0, 1 # id
+		move $a1, $t1
+		syscall
+	
+		jr $ra
+	
+	generate_number:
+	
+		li $a0, 1 # same id in generate_seed
 		li $a1, 4 # upper bound
 		li $v0, 42
 		syscall
-		
 		# $a0 hold the random int
+
 		move $v0, $a0
 		
-		jr $ra
-	
-	
-	# bright the color draft
-	light:
-	
-		# $a0: number: 0 to 3
-		
-
-		addiu $sp, $sp, -24
-		sw $ra, 16($sp)
-		sw $a0, 24($sp)
-		
-		# looks cleaner than a switch :D
-		beqz $a0, light_top
-		beq $a0, 1, light_right
-		beq $a0, 2, light_bottom
-		beq $a0, 3, light_left
-		
-		light_top:	
-			li $a1, GREEN_LIGHT
-			jal draw_bar
-			
-			# we will beep here because we can delay (sync) x ms by system call 33. 
-			# thus we dont need separate beep function being called in main loop
-			jal beep_number
-			
-			# redraw default color
-			lw $a0, 24($sp)
-			li $a1, GREEN
-			jal draw_bar
-			
-			j light_out	
-		light_right:
-			li $a1, RED_LIGHT
-			jal draw_bar
-			
-			jal beep_number
-			
-			lw $a0, 24($sp)
-			li $a1, RED
-			jal draw_bar
-			
-			j light_out
-		light_bottom:
-			li $a1, BLUE_LIGHT
-			jal draw_bar
-			
-			jal beep_number
-			
-			lw $a0, 24($sp)
-			li $a1, BLUE
-			jal draw_bar
-			
-			j light_out
-		light_left:
-			li $a1, YELLOW_LIGHT
-			jal draw_bar
-			
-			jal beep_number
-			
-			lw $a0, 24($sp)
-			li $a1, YELLOW
-			jal draw_bar
-			
-		light_out:
-		
-		
-
-		lw $ra, 16($sp)
-		addiu $sp, $sp, 24
 		jr $ra
 	
 	# noise when a number generated
@@ -329,8 +299,8 @@
 		
 		li $a0, 60 # pitch
 		lw $a1, speed
-		li $a2, 90 # instrument
-		li $a3, 80 # volume
+		li $a2, 32 # instrument
+		li $a3, 105 # volume
 		syscall
 		
 		jr $ra
@@ -366,162 +336,12 @@
 		li $v0, 33
 		
 		li $a0, 120 # pitch
-		lw $a1, 4000
+		lw $a1, 5000
 		li $a2, 10 # instrument
 		li $a3, 127 # volume
 		syscall
 		
 		jr $ra
-
-	main:
-			
-		addiu $sp, $sp, -24
-		
-		# do not to save $s0, $s1, ... used here
-		
-		start_game:
-		
-		la $a0, menu_msg
-		jal print_string_display
-
-		# init ring buffer
-		la $a0, rb
-		jal initBuffer
-		
-		# while user input != ('1' || '2')
-		jal enable_keyboard
-		la $s7, rb
-		main_loop_menu_msg:
-			move $a0, $s7
-			jal readBuffer
-			beq $v0, 49, main_loop_menu_msg_out # typed '1': keep playing
-			beq $v0, 50, main_end 		   # typed '2': break
-			j main_loop_menu_msg	   	   # loop
-		main_loop_menu_msg_out:
-		
-		jal disable_keyboard
-		
-		# uncomment after
-		#jal draw_game 
-		
-		# stack used
-		la $a0, stack
-		jal stack_init
-		
-		# get_valid_int_keyboard enables keyboard within it
-		
-		# number of sequences (max)
-		la $a0, rb
-		la $a1, seq_msg
-		jal get_valid_int_keyboard
-		sw $v0, num_sequence_max
-		
-		break # remove after
-		
-		# speed
-		la $a0, rb
-		la $a1, speed_msg
-		jal get_valid_int_keyboard
-		sw $v0, speed
-		
-		# starting in 3 sequences
-		li $s1, 1
-		
-		# points
-		li $s6, 0
-		
-		
-		keep_going:
-		
-		# i 
-		li $s2, 0
-		loop_generate_sequence: beq $s2, $s1, out_loop_generate_sequence 
-			
-			jal generate_number
-			move $s4, $v0 # temp num
-			
-			move $a0, $s4
-			jal light
-			
-			move $a0, $s3 # stack ptr
-			move $a1, $s4 # num generated
-			jal stack_push
-			beq $v0, 1, pushed_ok
-				break
-			pushed_ok:
-			
-			addiu $s2, $s2, 1
-		j loop_generate_sequence
-		out_loop_generate_sequence:
-		
-		
-		li $s2, 0
-		
-		# player turn
-		
-		jal enable_keyboard
-
-		la $a0, stack_keyboard
-		jal stack_init
-		
-		# while player did not play all sequences in keyboard
-		loop_play_sequence:
-			jal stack_size
-			
-			bne $s1, $v0, loop_play_sequence
-		
-		jal disable_keyboard
-		
-		
-		# all sequence played by player
-		li $s2, 0
-		check_sequence: beq $s2, $s1, check_sequence_out
-			la $a0, stack_keyboard
-			move $a1, $s2
-			jal stack_get_value_at_index
-			move $s4, $v0 # player: 0 to 3
-			
-			la $a0, stack
-			move $a1, $s2
-			jal stack_get_value_at_index
-			move $s5, $v0 # generated: 0 to 3
-			and $t1, $s4, $s5
-			bnez $t1, correct_typed
-			
-			wrong_typed:
-				jal beep_wrong
-				li $v0, 1
-				li $a0, 666
-				syscall
-				j start_game
-				
-			correct_typed:
-			li $v0, 1
-			li $a0, 555
-			syscall
-			addiu $s2, $s2, 1
-			j check_sequence
-		check_sequence_out:
-		
-		jal beep_right
-		
-		# add points
-		addiu $s6, $s6, 1
-		# increase sequence size
-		addiu $s1, $s1, 1
-		
-		lw $t1, num_sequence_max
-		beq $s1, $t1, champion
-		jal keep_going
-		
-		champion:
-			jal beep_champion
-
-		main_end:
-		addiu $sp, $sp 24
-		
-		break
-
 
 .kdata
 	_regs: .space 32
@@ -550,9 +370,9 @@
 	dont_exit:
 	
 	# print exception code
-	li $v0, 1
-	move $a0, $t1
-	syscall
+	#print_str("\nexception: ")
+	print_int($t1)
+	#print_str("\n")
 	
 	bnez $t1, not_hw_int
 		# deal with hw int

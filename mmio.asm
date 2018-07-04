@@ -1,7 +1,17 @@
-.data
+.macro print_str (%str)
+	.data
+		print_str_label: .asciiz %str
+	.text
+		li $v0, 4
+		la $a0, print_str_label
+		syscall
+.end_macro
 
-	get_valid_int_keyboard_msg: .asciiz "\nget_valid_int_keyboard_msg: "
-	newline: .asciiz "\n"
+.macro print_int (%x)
+	li $v0, 1
+	add $a0, $zero, %x
+	syscall
+.end_macro
 
 .text
 
@@ -19,7 +29,7 @@
 	disable_keyboard:
 	
 		# disable keyboard
-		sw $t0, 0xffff0000
+		sw $zero, 0xffff0000
 		
 		jr $ra	
 	get_char_keyboard:
@@ -27,6 +37,7 @@
 		jr $ra
 		
 	print_char_display:
+	
 		sb $a0, 0xffff000c
 		jr $ra
 	
@@ -68,18 +79,17 @@
 		sw $a0, 0($sp)
 		sw $a1, 4($sp)
 		
-		# init ring buffer
-		jal initBuffer
-		
-		jal enable_keyboard
-		
-
 		addiu $sp, $sp, -36
 		sw $ra, 16($sp)
 		sw $s0, 20($sp)
 		sw $s1, 24($sp)
 		sw $s2, 28($sp)
 		sw $s3, 32($sp)
+		
+		# init ring buffer
+		jal initBuffer
+		
+		jal enable_keyboard
 		
 		lw $s1, 36($sp) # &rb
 		lw $s2, 40($sp) # &msg
@@ -125,15 +135,9 @@
 		jal disable_keyboard
 		
 		# print final integer for debug
-			li $v0, 4
-			la $a0, get_valid_int_keyboard_msg
-			syscall
-			li $v0, 1
-			move $a0, $s3
-			syscall
-			li $v0, 4
-			la $a0, newline
-			syscall
+			print_str("\nget_valid_int_keyboard: ")
+			print_int($s3)
+			print_str("\n")
 
 		move $v0, $s3 # return
 		
@@ -144,9 +148,5 @@
 		lw $s3, 32($sp)
 
 		addiu $sp, $sp, 36
-		
-		# reset rb
-		lw $a0, 0($sp)
-		jal initBuffer
 		
 		jr $ra

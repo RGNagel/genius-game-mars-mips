@@ -1,3 +1,19 @@
+
+.macro print_str (%str)
+	.data
+		print_str_label: .asciiz %str
+	.text
+		li $v0, 4
+		la $a0, print_str_label
+		syscall
+.end_macro
+
+.macro print_int (%x)
+	li $v0, 1
+	add $a0, $zero, %x
+	syscall
+.end_macro
+
 .data
 	
 	.eqv RB_SIZE 32
@@ -20,9 +36,9 @@
 		# a0 pointer to ringbuffer
 		addi $a0, $a0, RB_SIZE
 		
-		sw $t0, 0($a0) # rd = 0
-		sw $t0, 4($a0) # wr = 0
-		sw $t0, 8($a0) # size = 0
+		sw $zero, 0($a0) # rd = 0
+		sw $zero, 4($a0) # wr = 0
+		sw $zero, 8($a0) # size = 0
 		
 		jr $ra
 				
@@ -82,17 +98,11 @@
 			addu $t1, $a0, $t2 # ptr + rd: & byte position
 			lb $s0, 0($t1) # return
 			
-			
-			# debug: 
-				li $v0, 4
-				la $a0, readBufferMsg
-				syscall
-				li $v0, 1
-				move $a0, $s0
-				syscall
-				li $v0, 4
-				la $a0, newline
-				syscall
+
+			# debug
+				print_str("\nreadBuffer: ")
+				print_int($s0)
+				print_str("\n")
 			
 			# read++
 			addiu $t2, $t2, 1 # rd++

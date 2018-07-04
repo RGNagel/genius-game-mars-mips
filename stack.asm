@@ -10,7 +10,7 @@
 	
 	stack_init:
 		# a0: pointer to stack (la)
-		sw $t0, STACK_SIZE($a0) # top = 0
+		sw $zero, STACK_SIZE($a0) # top = 0
 		jr $ra
 	stack_push:
 		# a0: ptr
