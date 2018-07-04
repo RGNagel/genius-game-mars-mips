@@ -9,3 +9,8 @@
   - *bitmap* address should be mapped to /heap/ (this is a workaround to a problem of overlapping data in data segment)
   - *bitmap display* must have a proportion of /128/ (changeable in =.data=) between /width/ and /unit width/ and /height/ and /unit height/
   
+** if problem with exception handler file not found
+
+- umark the follow box in /Settings -> Exception Handler/:
+ 
+  - /Include this exception file in all assemble operations/
